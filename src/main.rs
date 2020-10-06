@@ -119,31 +119,31 @@ mod things {
         }
         pub fn update(&mut self) {
             match self.direction {
-                super::grid::Direction::Up => self.coordinate.y = self.coordinate.y - 1,
-                super::grid::Direction::Down => self.coordinate.y = self.coordinate.y + 1,
-                super::grid::Direction::Left => self.coordinate.x = self.coordinate.x - 1,
-                super::grid::Direction::Right => self.coordinate.x = self.coordinate.x + 1,
+                Direction::Up => self.coordinate.y = self.coordinate.y - 1,
+                Direction::Down => self.coordinate.y = self.coordinate.y + 1,
+                Direction::Left => self.coordinate.x = self.coordinate.x - 1,
+                Direction::Right => self.coordinate.x = self.coordinate.x + 1,
             }
         }
     }
     #[derive(Debug, Clone)]
     pub struct TailPart {
-        pub coordinate: super::grid::Coordinate,
+        pub coordinate: Coordinate,
     }
     impl TailPart {
         pub fn new(x: i16, y: i16) -> TailPart {
             TailPart {
-                coordinate: super::grid::Coordinate::new(x, y),
+                coordinate: Coordinate::new(x, y),
             }
         }
     }
     pub struct Food {
-        pub coordinate: super::grid::Coordinate,
+        pub coordinate: Coordinate,
     }
     impl Food {
         pub fn new() -> Food {
             Food {
-                coordinate: super::grid::Coordinate::new(20, 10),
+                coordinate: Coordinate::new(20, 10),
             }
         }
         pub fn new_location(&mut self) {
@@ -167,17 +167,45 @@ mod things {
             Ok(())
         }
     }
+    pub struct ScoreTracker{
+        score:u16,
+        coordinate: Coordinate,
+    }
+    impl ScoreTracker{
+        pub fn new() -> ScoreTracker {
+            ScoreTracker{
+                score: 0,
+                coordinate: Coordinate::new(5, 5)
+            }
+        }
+        pub fn inc_score(&mut self){
+            self.score += 1;
+        }
+        pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
+            let t = format!("Score: {}", self.score);
+            let font = graphics::Font::default();
+            let text = graphics::Text::new((t, font, 36.0));
+
+            graphics::draw(ctx, &text, (ggez::mint::Point2 { x: self.coordinate.x as f32, y: self.coordinate.y as f32},))?;
+
+            Ok(())
+        }
+    }
 }
 use ggez::conf;
 use ggez::event::{self, EventHandler, KeyCode, KeyMods};
 use ggez::{graphics, Context, ContextBuilder, GameResult};
+
+
+use std::{thread, time};
+
 
 use std::time::Instant;
 
 struct MyGame {
     snake: things::Snake,
     last_update: Instant,
-    score: u16,
+    score_tracker: things::ScoreTracker,
     food: things::Food,
 }
 
@@ -186,17 +214,18 @@ impl MyGame {
         MyGame {
             snake: things::Snake::new(),
             last_update: Instant::now(),
-            score: 0,
+            score_tracker: things::ScoreTracker::new(),
             food: things::Food::new(),
         }
     }
     fn reset_game(&mut self) {
+        thread::sleep(time::Duration::from_secs(2));
         *self = MyGame{
             snake: things::Snake::new(),
             last_update: Instant::now(),
-            score: 0,
+            score_tracker: things::ScoreTracker::new(),
             food: things::Food::new(),
-        }
+        };
     }
     fn turn(&mut self) {
         match &self.snake.new_direction {
@@ -210,16 +239,16 @@ impl MyGame {
         }
     }
     fn collision(&mut self) {
-        if self.snake.coordinate.out_of_bounds() {
-            println!("DEAD");
+        if self.snake.coordinate.out_of_bounds() { // Colliding with border
             self.reset_game();
         }
-        if self.snake.coordinate == self.food.coordinate {
+        if self.snake.coordinate == self.food.coordinate { // Colliding with food
             self.food.new_location();
+            self.score_tracker.inc_score();
             let new_tail_part =
                 things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
             self.snake.tail.push_back(new_tail_part);
-        } else {
+        } else { // Normal moving
             let new_tail_part =
                 things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
             self.snake.tail.push_back(new_tail_part);
@@ -231,7 +260,6 @@ impl MyGame {
 
         for part in tail {
             if part.coordinate == self.snake.coordinate {
-                println!("Crash");
                 self.reset_game();
             }
         }
@@ -256,6 +284,7 @@ impl EventHandler for MyGame {
         graphics::clear(ctx, color);
         self.food.draw(ctx)?;
         self.snake.draw(ctx)?;
+        self.score_tracker.draw(ctx)?;
         graphics::present(ctx)
     }
 
