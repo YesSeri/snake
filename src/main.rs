@@ -1,7 +1,7 @@
 mod constants {
 
-    pub const CELL_SIZE: (i16, i16) = (15, 15);
-    pub const GRID_SIZE: (i16, i16) = (80, 40);
+    pub const CELL_SIZE: (i16, i16) = (25, 25);
+    pub const GRID_SIZE: (i16, i16) = (25, 25);
     pub const WINDOW_SIZE: (f32, f32) = (
         (CELL_SIZE.0 * GRID_SIZE.0) as f32,
         (CELL_SIZE.1 * GRID_SIZE.1) as f32,
@@ -83,18 +83,18 @@ mod things {
         }
         pub fn set_new_direction(keycode: KeyCode) -> Option<Direction> {
             match keycode {
-                KeyCode::W => Some(Direction::Up),
-                KeyCode::S => Some(Direction::Down),
-                KeyCode::A => Some(Direction::Left),
-                KeyCode::D => Some(Direction::Right),
+                KeyCode::Up => Some(Direction::Up),
+                KeyCode::Down => Some(Direction::Down),
+                KeyCode::Left => Some(Direction::Left),
+                KeyCode::Right => Some(Direction::Right),
                 _ => None,
             }
         }
 
         fn init_tail(starting_coordinate: Coordinate) -> VecDeque<TailPart> {
             let mut vector: VecDeque<TailPart> = VecDeque::new();
-            vector.push_back(TailPart{
-                coordinate: Coordinate::new(starting_coordinate.x, starting_coordinate.y)
+            vector.push_back(TailPart {
+                coordinate: Coordinate::new(starting_coordinate.x, starting_coordinate.y),
             });
             vector
         }
@@ -126,9 +126,9 @@ mod things {
             }
         }
     }
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub struct TailPart {
-        coordinate: super::grid::Coordinate,
+        pub coordinate: super::grid::Coordinate,
     }
     impl TailPart {
         pub fn new(x: i16, y: i16) -> TailPart {
@@ -190,6 +190,14 @@ impl MyGame {
             food: things::Food::new(),
         }
     }
+    fn reset_game(&mut self) {
+        *self = MyGame{
+            snake: things::Snake::new(),
+            last_update: Instant::now(),
+            score: 0,
+            food: things::Food::new(),
+        }
+    }
     fn turn(&mut self) {
         match &self.snake.new_direction {
             Some(new_direction) => {
@@ -204,16 +212,28 @@ impl MyGame {
     fn collision(&mut self) {
         if self.snake.coordinate.out_of_bounds() {
             println!("DEAD");
+            self.reset_game();
         }
         if self.snake.coordinate == self.food.coordinate {
             self.food.new_location();
-
-            let new_tail_part = things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
+            let new_tail_part =
+                things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
             self.snake.tail.push_back(new_tail_part);
-        }else {
-            let new_tail_part = things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
+        } else {
+            let new_tail_part =
+                things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
             self.snake.tail.push_back(new_tail_part);
             self.snake.tail.pop_front();
+        }
+        let mut tail = self.snake.tail.clone(); // These two things are done because the last part of the tail is underneat the head of the snake. 
+
+        tail.pop_back();
+
+        for part in tail {
+            if part.coordinate == self.snake.coordinate {
+                println!("Crash");
+                self.reset_game();
+            }
         }
     }
 }
