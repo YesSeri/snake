@@ -6,7 +6,7 @@ mod constants {
         (CELL_SIZE.0 * GRID_SIZE.0) as f32,
         (CELL_SIZE.1 * GRID_SIZE.1) as f32,
     );
-    pub const DESIRED_FPS: f32 = 1.0;
+    pub const DESIRED_FPS: f32 = 10.0;
     pub const MS_PER_UPDATE: f32 = 1.0 / DESIRED_FPS * 1000.0;
 }
 
