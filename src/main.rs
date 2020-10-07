@@ -1,12 +1,12 @@
 mod constants {
 
-    pub const CELL_SIZE: (i16, i16) = (25, 25);
-    pub const GRID_SIZE: (i16, i16) = (25, 25);
+    pub const CELL_SIZE: (i16, i16) = (50, 50);
+    pub const GRID_SIZE: (i16, i16) = (31, 18);
     pub const WINDOW_SIZE: (f32, f32) = (
         (CELL_SIZE.0 * GRID_SIZE.0) as f32,
         (CELL_SIZE.1 * GRID_SIZE.1) as f32,
     );
-    pub const DESIRED_FPS: f32 = 8.0;
+    pub const DESIRED_FPS: f32 = 1.0;
     pub const MS_PER_UPDATE: f32 = 1.0 / DESIRED_FPS * 1000.0;
 }
 
@@ -69,6 +69,7 @@ mod things {
         pub tail: VecDeque<TailPart>,
         pub direction: Direction,
         pub new_direction: Option<Direction>,
+        pub queued_direction: Option<Direction>,
     }
     impl Snake {
         pub fn new() -> Snake {
@@ -79,33 +80,52 @@ mod things {
                 tail: Snake::init_tail(starting_coordinate),
                 direction: starting_direction,
                 new_direction: None,
+                queued_direction: None,
             }
         }
-        pub fn set_new_direction(keycode: KeyCode) -> Option<Direction> {
-            match keycode {
-                KeyCode::Up => Some(Direction::Up),
-                KeyCode::Down => Some(Direction::Down),
-                KeyCode::Left => Some(Direction::Left),
-                KeyCode::Right => Some(Direction::Right),
-                _ => None,
+        pub fn set_new_direction(&mut self, keycode: KeyCode) {
+            if self.new_direction == None {
+                if KeyCode::Up == keycode {
+                    self.new_direction = Some(Direction::Up)
+                }
+                if KeyCode::Down == keycode{
+                    self.new_direction = Some(Direction::Down)
+                }
+                if KeyCode::Left == keycode{
+                    self.new_direction = Some(Direction::Left)
+                }
+                if KeyCode::Right == keycode{
+                    self.new_direction = Some(Direction::Right)
+                }
+            } else {
+                if KeyCode::Up == keycode{
+                    self.queued_direction = Some(Direction::Up)
+                }
+                if KeyCode::Down == keycode{
+                    self.queued_direction = Some(Direction::Down)
+                }
+                if KeyCode::Left == keycode{
+                    self.queued_direction = Some(Direction::Left)
+                }
+                if KeyCode::Right == keycode{
+                    self.queued_direction = Some(Direction::Right)
+                }
+
             }
+            
         }
 
         fn init_tail(starting_coordinate: Coordinate) -> VecDeque<TailPart> {
             let mut vector: VecDeque<TailPart> = VecDeque::new();
-            vector.push_back(TailPart {
-                coordinate: Coordinate::new(starting_coordinate.x, starting_coordinate.y),
-            });
+            for i in 0..4{
+                vector.push_front(TailPart {
+                    coordinate: Coordinate::new(starting_coordinate.x-i, starting_coordinate.y),
+                });
+            }
             vector
         }
         pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-            let rect_mesh = graphics::Mesh::new_rectangle(
-                ctx,
-                ggez::graphics::DrawMode::fill(),
-                self.coordinate.into(),
-                graphics::BLACK,
-            )?;
-            graphics::draw(ctx, &rect_mesh, (ggez::mint::Point2 { x: 0.0, y: 0.0 },))?;
+            
             for part in &self.tail {
                 let part_mesh = graphics::Mesh::new_rectangle(
                     ctx,
@@ -115,6 +135,14 @@ mod things {
                 )?;
                 graphics::draw(ctx, &part_mesh, (ggez::mint::Point2 { x: 0.0, y: 0.0 },))?;
             }
+            let color = graphics::Color::new(0.1, 0.5, 0.1, 1.0);
+            let rect_mesh = graphics::Mesh::new_rectangle(
+                ctx,
+                ggez::graphics::DrawMode::fill(),
+                self.coordinate.into(),
+                color,
+            )?;
+            graphics::draw(ctx, &rect_mesh, (ggez::mint::Point2 { x: 0.0, y: 0.0 },))?;
             Ok(())
         }
         pub fn update(&mut self) {
@@ -146,13 +174,21 @@ mod things {
                 coordinate: Coordinate::new(20, 10),
             }
         }
-        pub fn new_location(&mut self) {
-            let mut rng = rand::thread_rng();
-            let x = rng.gen_range(0, crate::constants::GRID_SIZE.0);
-            let y = rng.gen_range(0, crate::constants::GRID_SIZE.1);
-
-            self.coordinate.x = x;
-            self.coordinate.y = y;
+        pub fn new_location(&mut self, tail: &VecDeque<TailPart>) {
+            'outer: loop {
+                let mut rng = rand::thread_rng();
+                let coordinate: Coordinate = Coordinate {
+                    x: rng.gen_range(0, crate::constants::GRID_SIZE.0),
+                    y: rng.gen_range(0, crate::constants::GRID_SIZE.1),
+                };
+                for part in tail {
+                    if part.coordinate == coordinate {
+                        continue 'outer;
+                    }
+                }
+                self.coordinate = coordinate;
+                break;
+            }
         }
         pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
             let color = graphics::Color::new(0.8, 0.2, 0.2, 1.0);
@@ -167,26 +203,33 @@ mod things {
             Ok(())
         }
     }
-    pub struct ScoreTracker{
-        score:u16,
+    pub struct ScoreTracker {
+        score: u16,
         coordinate: Coordinate,
     }
-    impl ScoreTracker{
+    impl ScoreTracker {
         pub fn new() -> ScoreTracker {
-            ScoreTracker{
+            ScoreTracker {
                 score: 0,
-                coordinate: Coordinate::new(5, 5)
+                coordinate: Coordinate::new(1, 1),
             }
         }
-        pub fn inc_score(&mut self){
+        pub fn inc_score(&mut self) {
             self.score += 1;
         }
         pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
             let t = format!("Score: {}", self.score);
             let font = graphics::Font::default();
-            let text = graphics::Text::new((t, font, 36.0));
+            let text = graphics::Text::new((t, font, 50.0));
 
-            graphics::draw(ctx, &text, (ggez::mint::Point2 { x: self.coordinate.x as f32, y: self.coordinate.y as f32},))?;
+            graphics::draw(
+                ctx,
+                &text,
+                (ggez::mint::Point2 {
+                    x: (self.coordinate.x * crate::constants::CELL_SIZE.0) as f32,
+                    y: (self.coordinate.y * crate::constants::CELL_SIZE.1) as f32,
+                },),
+            )?;
 
             Ok(())
         }
@@ -196,9 +239,7 @@ use ggez::conf;
 use ggez::event::{self, EventHandler, KeyCode, KeyMods};
 use ggez::{graphics, Context, ContextBuilder, GameResult};
 
-
 use std::{thread, time};
-
 
 use std::time::Instant;
 
@@ -219,42 +260,58 @@ impl MyGame {
         }
     }
     fn reset_game(&mut self) {
-        thread::sleep(time::Duration::from_secs(2));
-        *self = MyGame{
+        thread::sleep(time::Duration::from_millis(1500));
+        *self = MyGame {
             snake: things::Snake::new(),
             last_update: Instant::now(),
             score_tracker: things::ScoreTracker::new(),
             food: things::Food::new(),
         };
     }
+    // You can queue a turn, if you quickly press two keys after another. The game feels buggy and
+    // unresponsive otherwise. 
     fn turn(&mut self) {
         match &self.snake.new_direction {
             Some(new_direction) => {
                 if new_direction != &self.snake.direction.inverse() {
                     // If the direction of the snake is opposite to choosen direction we dont want to turn 180 degrees.
                     self.snake.direction = *new_direction;
+                    self.snake.new_direction = None;
                 }
             }
-            None => (),
+            None => { 
+                match &self.snake.queued_direction {
+                    Some(queued_direction) => {
+                        if queued_direction != &self.snake.direction.inverse() {
+                            self.snake.direction = *queued_direction;
+                            self.snake.queued_direction = None;
+                        }
+                    }
+                    None => (),
+                }
+            }
         }
     }
     fn collision(&mut self) {
-        if self.snake.coordinate.out_of_bounds() { // Colliding with border
+        if self.snake.coordinate.out_of_bounds() {
+            // Colliding with border
             self.reset_game();
         }
-        if self.snake.coordinate == self.food.coordinate { // Colliding with food
-            self.food.new_location();
+        if self.snake.coordinate == self.food.coordinate {
+            // Colliding with food
+            self.food.new_location(&self.snake.tail);
             self.score_tracker.inc_score();
             let new_tail_part =
                 things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
             self.snake.tail.push_back(new_tail_part);
-        } else { // Normal moving
+        } else {
+            // Normal moving
             let new_tail_part =
                 things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
             self.snake.tail.push_back(new_tail_part);
             self.snake.tail.pop_front();
         }
-        let mut tail = self.snake.tail.clone(); // These two things are done because the last part of the tail is underneat the head of the snake. 
+        let mut tail = self.snake.tail.clone(); // These two things are done because the last part of the tail is underneat the head of the snake.
 
         tail.pop_back();
 
@@ -271,9 +328,9 @@ impl EventHandler for MyGame {
         if Instant::now() - self.last_update
             >= std::time::Duration::from_millis(constants::MS_PER_UPDATE as u64)
         {
+            self.turn();
             self.last_update = Instant::now();
             self.snake.update();
-            self.turn();
             self.collision();
         }
         Ok(())
@@ -282,9 +339,9 @@ impl EventHandler for MyGame {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         let color = graphics::Color::from_rgba(135, 135, 235, 255);
         graphics::clear(ctx, color);
-        self.food.draw(ctx)?;
         self.snake.draw(ctx)?;
         self.score_tracker.draw(ctx)?;
+        self.food.draw(ctx)?;
         graphics::present(ctx)
     }
 
@@ -297,16 +354,18 @@ impl EventHandler for MyGame {
     ) {
         // Get a new direction here, but set it in the update function so you cant bug it by
         // quickly turning twice to turn 180 degree.
-        self.snake.new_direction = things::Snake::set_new_direction(keycode);
+        self.snake.set_new_direction(keycode);
     }
 }
 
 fn main() -> GameResult<()> {
     let (mut ctx, mut event_loop) = ContextBuilder::new("Snake", "Henrik Zenkert")
-        .window_mode(conf::WindowMode::default().dimensions(
-            crate::constants::WINDOW_SIZE.0,
-            crate::constants::WINDOW_SIZE.1,
-        ))
+        .window_mode(conf::WindowMode::default()
+            .dimensions(
+                crate::constants::WINDOW_SIZE.0,
+                crate::constants::WINDOW_SIZE.1,)
+            .fullscreen_type(conf::FullscreenType::Desktop)
+        )
         .build()?;
 
     let mut my_game = MyGame::new(&mut ctx);
