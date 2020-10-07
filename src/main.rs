@@ -1,5 +1,4 @@
 mod constants {
-
     pub const CELL_SIZE: (i16, i16) = (50, 50);
     pub const GRID_SIZE: (i16, i16) = (31, 18);
     pub const WINDOW_SIZE: (f32, f32) = (
@@ -22,21 +21,18 @@ mod grid {
             Coordinate { x, y }
         }
         pub fn out_of_bounds(&mut self) -> bool {
-            self.x >= crate::constants::GRID_SIZE.0
-                || self.y >= crate::constants::GRID_SIZE.1
-                || self.x < 0
-                || self.y < 0
+            let g_z = &crate::constants::GRID_SIZE;
+            self.x >= g_z.0 || self.y >= g_z.1 || self.x < 0 || self.y < 0
         }
     }
     impl From<Coordinate> for graphics::Rect {
         fn from(coordinate: Coordinate) -> graphics::Rect {
-            let rect = graphics::Rect::new(
+            graphics::Rect::new(
                 (coordinate.x * crate::constants::CELL_SIZE.0) as f32,
                 (coordinate.y * crate::constants::CELL_SIZE.1) as f32,
                 crate::constants::CELL_SIZE.0.into(),
                 crate::constants::CELL_SIZE.1.into(),
-            );
-            rect
+            )
         }
     }
     #[derive(Debug, PartialEq, Clone, Copy)]
@@ -66,71 +62,51 @@ mod things {
     use std::collections::VecDeque;
     pub struct Snake {
         pub coordinate: Coordinate,
-        pub tail: VecDeque<TailPart>,
+        pub tail: VecDeque<Coordinate>,
         pub direction: Direction,
         pub new_direction: Option<Direction>,
         pub queued_direction: Option<Direction>,
     }
     impl Snake {
         pub fn new() -> Snake {
-            let starting_direction = Direction::Right;
-            let starting_coordinate = Coordinate::new(10, 10);
+            let starting_coordinate = Coordinate::new(10,10);
             Snake {
                 coordinate: starting_coordinate,
                 tail: Snake::init_tail(starting_coordinate),
-                direction: starting_direction,
+                direction: Direction::Right,
                 new_direction: None,
                 queued_direction: None,
             }
         }
         pub fn set_new_direction(&mut self, keycode: KeyCode) {
             if self.new_direction == None {
-                if KeyCode::Up == keycode {
-                    self.new_direction = Some(Direction::Up)
-                }
-                if KeyCode::Down == keycode{
-                    self.new_direction = Some(Direction::Down)
-                }
-                if KeyCode::Left == keycode{
-                    self.new_direction = Some(Direction::Left)
-                }
-                if KeyCode::Right == keycode{
-                    self.new_direction = Some(Direction::Right)
-                }
+                if KeyCode::Up == keycode {self.new_direction = Some(Direction::Up)}
+                if KeyCode::Down == keycode{self.new_direction = Some(Direction::Down)}
+                if KeyCode::Left == keycode{self.new_direction = Some(Direction::Left)}
+                if KeyCode::Right == keycode{self.new_direction = Some(Direction::Right)}
             } else {
-                if KeyCode::Up == keycode{
-                    self.queued_direction = Some(Direction::Up)
-                }
-                if KeyCode::Down == keycode{
-                    self.queued_direction = Some(Direction::Down)
-                }
-                if KeyCode::Left == keycode{
-                    self.queued_direction = Some(Direction::Left)
-                }
-                if KeyCode::Right == keycode{
-                    self.queued_direction = Some(Direction::Right)
-                }
-
+                if KeyCode::Up == keycode{self.queued_direction = Some(Direction::Up)}
+                if KeyCode::Down == keycode{self.queued_direction = Some(Direction::Down)}
+                if KeyCode::Left == keycode{self.queued_direction = Some(Direction::Left)}
+                if KeyCode::Right == keycode{self.queued_direction = Some(Direction::Right)}
             }
             
         }
 
-        fn init_tail(starting_coordinate: Coordinate) -> VecDeque<TailPart> {
-            let mut vector: VecDeque<TailPart> = VecDeque::new();
+        fn init_tail(starting_coordinate: Coordinate) -> VecDeque<Coordinate> {
+            let mut vector: VecDeque<Coordinate> = VecDeque::new();
             for i in 0..4{
-                vector.push_front(TailPart {
-                    coordinate: Coordinate::new(starting_coordinate.x-i, starting_coordinate.y),
-                });
+                vector.push_front(super::grid::Coordinate::new(starting_coordinate.x-i, starting_coordinate.y));
             }
             vector
         }
         pub fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
             
-            for part in &self.tail {
+            for coordinate in self.tail.clone() {
                 let part_mesh = graphics::Mesh::new_rectangle(
                     ctx,
                     ggez::graphics::DrawMode::fill(),
-                    part.coordinate.into(),
+                    coordinate.into(),
                     graphics::BLACK,
                 )?;
                 graphics::draw(ctx, &part_mesh, (ggez::mint::Point2 { x: 0.0, y: 0.0 },))?;
@@ -154,17 +130,6 @@ mod things {
             }
         }
     }
-    #[derive(Debug, Clone)]
-    pub struct TailPart {
-        pub coordinate: Coordinate,
-    }
-    impl TailPart {
-        pub fn new(x: i16, y: i16) -> TailPart {
-            TailPart {
-                coordinate: Coordinate::new(x, y),
-            }
-        }
-    }
     pub struct Food {
         pub coordinate: Coordinate,
     }
@@ -174,15 +139,15 @@ mod things {
                 coordinate: Coordinate::new(20, 10),
             }
         }
-        pub fn new_location(&mut self, tail: &VecDeque<TailPart>) {
+        pub fn new_location(&mut self, tail: &VecDeque<Coordinate>) {
             'outer: loop {
                 let mut rng = rand::thread_rng();
                 let coordinate: Coordinate = Coordinate {
                     x: rng.gen_range(0, crate::constants::GRID_SIZE.0),
                     y: rng.gen_range(0, crate::constants::GRID_SIZE.1),
                 };
-                for part in tail {
-                    if part.coordinate == coordinate {
+                for tail_part_coordinate in tail {
+                    if *tail_part_coordinate == coordinate {
                         continue 'outer;
                     }
                 }
@@ -248,6 +213,7 @@ struct MyGame {
     last_update: Instant,
     score_tracker: things::ScoreTracker,
     food: things::Food,
+    pause: bool,
 }
 
 impl MyGame {
@@ -257,15 +223,17 @@ impl MyGame {
             last_update: Instant::now(),
             score_tracker: things::ScoreTracker::new(),
             food: things::Food::new(),
+            pause: true,
         }
     }
     fn reset_game(&mut self) {
         thread::sleep(time::Duration::from_millis(1500));
         *self = MyGame {
-            snake: things::Snake::new(),
+            snake: things::Snake::new(), 
             last_update: Instant::now(),
             score_tracker: things::ScoreTracker::new(),
             food: things::Food::new(),
+            pause: true,
         };
     }
     // You can queue a turn, if you quickly press two keys after another. The game feels buggy and
@@ -277,6 +245,8 @@ impl MyGame {
                     // If the direction of the snake is opposite to choosen direction we dont want to turn 180 degrees.
                     self.snake.direction = *new_direction;
                     self.snake.new_direction = None;
+                } else {
+                    self.snake.new_direction = None;
                 }
             }
             None => { 
@@ -285,9 +255,11 @@ impl MyGame {
                         if queued_direction != &self.snake.direction.inverse() {
                             self.snake.direction = *queued_direction;
                             self.snake.queued_direction = None;
+                        } else {
+                            self.snake.queued_direction = None;
                         }
                     }
-                    None => (),
+                    None => ()
                 }
             }
         }
@@ -302,21 +274,21 @@ impl MyGame {
             self.food.new_location(&self.snake.tail);
             self.score_tracker.inc_score();
             let new_tail_part =
-                things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
+                grid::Coordinate::new(self.snake.coordinate.x, self.snake.coordinate.y);
             self.snake.tail.push_back(new_tail_part);
         } else {
             // Normal moving
             let new_tail_part =
-                things::TailPart::new(self.snake.coordinate.x, self.snake.coordinate.y);
+                grid::Coordinate::new(self.snake.coordinate.x, self.snake.coordinate.y);
             self.snake.tail.push_back(new_tail_part);
             self.snake.tail.pop_front();
         }
-        let mut tail = self.snake.tail.clone(); // These two things are done because the last part of the tail is underneat the head of the snake.
+        let mut tail = self.snake.tail.clone(); // These two things are done because the last part of the tail is under the head of the snake.
 
         tail.pop_back();
 
-        for part in tail {
-            if part.coordinate == self.snake.coordinate {
+        for coordinate in tail {
+            if coordinate == self.snake.coordinate {
                 self.reset_game();
             }
         }
@@ -328,8 +300,15 @@ impl EventHandler for MyGame {
         if Instant::now() - self.last_update
             >= std::time::Duration::from_millis(constants::MS_PER_UPDATE as u64)
         {
-            self.turn();
             self.last_update = Instant::now();
+            if self.pause {
+                self.pause = false;
+                self.snake.direction = grid::Direction::Right;
+                self.snake.new_direction = None;
+                self.snake.queued_direction = None;
+            } else {
+                self.turn();
+            }
             self.snake.update();
             self.collision();
         }
@@ -340,8 +319,8 @@ impl EventHandler for MyGame {
         let color = graphics::Color::from_rgba(135, 135, 235, 255);
         graphics::clear(ctx, color);
         self.snake.draw(ctx)?;
-        self.score_tracker.draw(ctx)?;
         self.food.draw(ctx)?;
+        self.score_tracker.draw(ctx)?;
         graphics::present(ctx)
     }
 
